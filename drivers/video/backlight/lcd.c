@@ -14,6 +14,7 @@
 #include <linux/err.h>
 #include <linux/fb.h>
 #include <linux/slab.h>
+#include <linux/dev_namespace.h>
 
 #if defined(CONFIG_FB) || (defined(CONFIG_FB_MODULE) && \
 			   defined(CONFIG_LCD_CLASS_DEVICE_MODULE))
@@ -96,13 +97,22 @@ static ssize_t lcd_show_power(struct device *dev, struct device_attribute *attr,
 static ssize_t lcd_store_power(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	int rc = -ENXIO;
+	int rc;
 	struct lcd_device *ld = to_lcd_device(dev);
 	unsigned long power;
 
 	rc = kstrtoul(buf, 0, &power);
 	if (rc)
 		return rc;
+
+	if (!is_active_dev_ns(current_dev_ns())) {
+		printk(KERN_INFO "%s: not setting %s power to %lu from inactive devns\n",
+		       __func__, dev_name(dev), power);
+		rc = count;
+		goto out;
+	}
+
+	rc = -ENXIO;
 
 	mutex_lock(&ld->ops_lock);
 	if (ld->ops && ld->ops->set_power) {
@@ -112,6 +122,7 @@ static ssize_t lcd_store_power(struct device *dev,
 	}
 	mutex_unlock(&ld->ops_lock);
 
+ out:
 	return rc;
 }
 
@@ -132,13 +143,22 @@ static ssize_t lcd_show_contrast(struct device *dev,
 static ssize_t lcd_store_contrast(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	int rc = -ENXIO;
+	int rc;
 	struct lcd_device *ld = to_lcd_device(dev);
 	unsigned long contrast;
 
 	rc = kstrtoul(buf, 0, &contrast);
 	if (rc)
 		return rc;
+
+	if (!is_active_dev_ns(current_dev_ns())) {
+		printk(KERN_INFO "%s: not setting %s contrast to %lu from inactive devn.\n",
+		       __func__, dev_name(dev), contrast);
+		rc = count;
+		goto out;
+	}
+
+	rc = -ENXIO;
 
 	mutex_lock(&ld->ops_lock);
 	if (ld->ops && ld->ops->set_contrast) {
@@ -148,6 +168,7 @@ static ssize_t lcd_store_contrast(struct device *dev,
 	}
 	mutex_unlock(&ld->ops_lock);
 
+ out:
 	return rc;
 }
 
