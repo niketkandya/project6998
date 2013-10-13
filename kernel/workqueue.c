@@ -317,6 +317,30 @@ static inline int __next_wq_cpu(int cpu, const struct cpumask *mask,
 	     (cpu) < WORK_CPU_NONE;					\
 	     (cpu) = __next_wq_cpu((cpu), cpu_possible_mask, (wq)))
 
+#ifdef CONFIG_NAMESPACES
+static void del_work_nsproxy(struct work_struct *work)
+{
+	struct nsproxy *nsproxy = work->nsproxy;
+	if (nsproxy) {
+		work->nsproxy = NULL;
+		put_nsproxy(nsproxy);
+	}
+}
+
+static void add_work_nsproxy(struct nsproxy *nsproxy,
+			     struct work_struct *work)
+{
+	get_nsproxy(nsproxy);
+	if (work->nsproxy)
+		del_work_nsproxy(work);
+	work->nsproxy = nsproxy;
+}
+#else
+static void del_work_nsproxy(struct work_struct *work) {}
+static void add_work_nsproxy(struct nsproxy *nsproxy,
+			     struct work_struct *work) {}
+#endif
+
 #ifdef CONFIG_DEBUG_OBJECTS_WORK
 
 static struct debug_obj_descr work_debug_descr;
@@ -1178,6 +1202,50 @@ int queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
 EXPORT_SYMBOL_GPL(queue_delayed_work_on);
 
 /**
+ * queue_work_in - queue work to be run in the specified set of namespaces
+ * @nsproxy: the set of namespaces in which the work will be run
+ * @wq: workqueue to use
+ * @work: work to queue
+ *
+ * Returns 0 if @work was already on a queue, non-zero otherwise
+ */
+int queue_work_in(struct nsproxy *nsproxy, struct workqueue_struct *wq,
+		  struct work_struct *work)
+{
+	/* make this function exactly as queue_work() if nsproxy == NULL */
+	if (nsproxy)
+		add_work_nsproxy(nsproxy, work);
+	return queue_work(wq, work);
+}
+EXPORT_SYMBOL_GPL(queue_work_in);
+
+#ifdef CONFIG_NAMESPACES
+/**
+ * switch_workqueue_ns - switch the current workqueue's namespace
+ *
+ * @nsproxy: the set of namespaces to make current (active)
+ * @get_ref: whether or not a reference to the namespace should be taken
+ *           (as switch_task_namespace doesn't do that).
+ *
+ * @returns the previously used namespace
+ *
+ * @note that a reference to the namespace is taken before it is returned.
+ * This is because switch_task_namespace releases a reference to the old
+ * namespace it replaces, and we assume that this switch is temporary,
+ * i.e., we'll want to switch back to the original at some point.
+ */
+static struct nsproxy *switch_workqueue_ns(struct nsproxy *nsproxy, int get_ref)
+{
+	struct nsproxy *prev_nsp = current->nsproxy;
+	get_nsproxy(prev_nsp);
+	if (get_ref)
+		get_nsproxy(nsproxy);
+	switch_task_namespaces(current, nsproxy);
+	return prev_nsp;
+}
+#endif
+
+/**
  * worker_enter_idle - enter idle state
  * @worker: worker which is entering idle state
  *
@@ -1807,6 +1875,9 @@ __acquires(&gcwq->lock)
 	work_func_t f = work->func;
 	int work_color;
 	struct worker *collision;
+#ifdef CONFIG_NAMESPACES
+	struct nsproxy *old_nsproxy = NULL;
+#endif
 #ifdef CONFIG_LOCKDEP
 	/*
 	 * It is permissible to free the struct work_struct from
@@ -1863,6 +1934,14 @@ __acquires(&gcwq->lock)
 		worker_set_flags(worker, WORKER_CPU_INTENSIVE, true);
 
 	spin_unlock_irq(&gcwq->lock);
+#ifdef CONFIG_NAMESPACES
+	if (work->nsproxy) {
+		/* take an extra reference to work->nsproxy */
+		old_nsproxy = switch_workqueue_ns(work->nsproxy, 1);
+		/* disassociate the nsproxy from the work (drops a reference) */
+		del_work_nsproxy(work);
+	}
+#endif
 
 	work_clear_pending(work);
 	lock_map_acquire_read(&cwq->wq->lockdep_map);
@@ -1876,6 +1955,16 @@ __acquires(&gcwq->lock)
 	trace_workqueue_execute_end(work);
 	lock_map_release(&lockdep_map);
 	lock_map_release(&cwq->wq->lockdep_map);
+
+#ifdef CONFIG_NAMESPACES
+	/* switch back to our proper nsproxy, and drop the reference
+	 * to the work's proxy */
+	if (old_nsproxy) {
+		/* don't need an extra reference on current nsproxy */
+		old_nsproxy = switch_workqueue_ns(old_nsproxy, 0);
+		put_nsproxy(old_nsproxy);
+	}
+#endif
 
 	if (unlikely(in_atomic() || lockdep_depth(current) > 0)) {
 		printk(KERN_ERR "BUG: workqueue leaked lock or atomic: "
