@@ -231,6 +231,19 @@ struct fb_bitfield {
 #define FB_VMODE_SMOOTH_XPAN	512	/* smooth xpan possible (internally used) */
 #define FB_VMODE_CONUPDATE	512	/* don't update x/yoffset	*/
 
+#define FB_FLAG_RATIO_4_3	64
+#define FB_FLAG_RATIO_16_9	128
+#define FB_FLAG_PIXEL_REPEAT	256
+
+/*
+ * Stereo modes
+ */
+#define FB_VMODE_STEREO_NONE        0x00000000  /* not stereo */
+#define FB_VMODE_STEREO_FRAME_PACK  0x01000000  /* frame packing */
+#define FB_VMODE_STEREO_TOP_BOTTOM  0x02000000  /* top-bottom */
+#define FB_VMODE_STEREO_LEFT_RIGHT  0x04000000  /* left-right */
+#define FB_VMODE_STEREO_MASK        0xFF000000
+
 /*
  * Display rotation support
  */
@@ -407,6 +420,7 @@ struct fb_cursor {
 
 #include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/device.h>
 #include <linux/workqueue.h>
 #include <linux/notifier.h>
 #include <linux/list.h>
@@ -835,6 +849,9 @@ struct fb_tile_ops {
 /* report to the VT layer that this fb driver can accept forced console
    output like oopses */
 #define FBINFO_CAN_FORCE_OUTPUT     0x200000
+
+/* corresponds to a namespace-aware (multiplexed) virtual fbinfo */
+#define FBINFO_DEV_NS			0x400000
 
 struct fb_info {
 	atomic_t count;
