@@ -18,6 +18,9 @@
 
 #include <linux/list.h>
 #include <linux/ktime.h>
+#include <linux/dev_namespace.h>
+
+struct wl_ns_token;
 
 /* A wake_lock prevents the system from entering suspend or other low power
  * states when active. If the type is set to WAKE_LOCK_SUSPEND, the wake_lock
@@ -28,6 +31,7 @@
 
 enum {
 	WAKE_LOCK_SUSPEND, /* Prevent suspend */
+	WAKE_LOCK_IDLE,    /* Prevent low power idle */
 	WAKE_LOCK_TYPE_COUNT
 };
 
@@ -37,6 +41,7 @@ struct wake_lock {
 	int                 flags;
 	const char         *name;
 	unsigned long       expires;
+	struct list_head    locked_by;
 #ifdef CONFIG_WAKELOCK_STAT
 	struct {
 		int             count;
@@ -72,6 +77,8 @@ int wake_lock_active(struct wake_lock *lock);
  */
 long has_wake_lock(int type);
 
+int wake_locked_in(struct wake_lock *lock, struct dev_namespace *ns);
+
 #else
 
 static inline void wake_lock_init(struct wake_lock *lock, int type,
@@ -83,6 +90,10 @@ static inline void wake_unlock(struct wake_lock *lock) {}
 
 static inline int wake_lock_active(struct wake_lock *lock) { return 0; }
 static inline long has_wake_lock(int type) { return 0; }
+
+static inline struct wl_ns_token *
+wake_locked_in(struct wake_lock *lock, struct dev_namespace *ns)
+{ return NULL; }
 
 #endif
 
