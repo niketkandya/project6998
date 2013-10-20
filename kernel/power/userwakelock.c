@@ -112,6 +112,7 @@ static struct user_wake_lock *lookup_wake_lock_name(
 		return ERR_PTR(-ENOMEM);
 	}
 	memcpy(l->name, buf, name_len);
+	l->name[name_len] = '\0';
 	if (debug_mask & DEBUG_NEW)
 		pr_info("lookup_wake_lock_name: new wake lock %s\n", l->name);
 	wake_lock_init(&l->wake_lock, WAKE_LOCK_SUSPEND, l->name);

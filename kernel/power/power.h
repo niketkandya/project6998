@@ -177,11 +177,13 @@ extern const char *const pm_states[];
 
 extern bool valid_state(suspend_state_t state);
 extern int suspend_devices_and_enter(suspend_state_t state);
+extern int enter_state(suspend_state_t state);
 #else /* !CONFIG_SUSPEND */
 static inline int suspend_devices_and_enter(suspend_state_t state)
 {
 	return -ENOSYS;
 }
+static inline int enter_state(suspend_state_t state) { return -ENOSYS; }
 static inline bool valid_state(suspend_state_t state) { return false; }
 #endif /* !CONFIG_SUSPEND */
 
@@ -269,7 +271,7 @@ static inline void suspend_thaw_processes(void)
 /* kernel/power/wakelock.c */
 extern struct workqueue_struct *suspend_work_queue;
 extern struct wake_lock main_wake_lock;
-extern suspend_state_t requested_suspend_state;
+extern suspend_state_t get_suspend_state(void);
 extern void suspend_sys_sync_queue(void);
 extern int suspend_sys_sync_wait(void);
 #else
