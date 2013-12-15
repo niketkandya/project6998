@@ -32,6 +32,7 @@
 #include <linux/mman.h>
 #include <linux/sort.h>
 #include <asm/cacheflush.h>
+#include <linux/dev_namespace.h>
 
 #include "kgsl.h"
 #include "kgsl_debugfs.h"
@@ -543,6 +544,10 @@ static int kgsl_suspend_device(struct kgsl_device *device, pm_message_t state)
 	if (!device)
 		return -EINVAL;
 
+	if (!is_active_dev_ns(current_dev_ns())) {
+		return -EINVAL;
+	}
+
 	KGSL_PWR_WARN(device, "suspend start\n");
 
 	mutex_lock(&device->mutex);
@@ -556,7 +561,10 @@ static int kgsl_suspend_device(struct kgsl_device *device, pm_message_t state)
 	device->ftbl->drain(device);
 
 	/* Wait for the active count to hit zero */
-	kgsl_active_count_wait(device);
+	if (kgsl_active_count_wait(device)) {
+		//do some stuff here
+		//TODO: Niket Kandya
+	}
 
 	/* Don't let the timer wake us during suspended sleep. */
 	del_timer_sync(&device->idle_timer);
@@ -602,6 +610,10 @@ static int kgsl_resume_device(struct kgsl_device *device)
 
 	if (!device)
 		return -EINVAL;
+
+	if (!is_active_dev_ns(current_dev_ns())) {
+		return -EINVAL;
+	}
 
 	KGSL_PWR_WARN(device, "resume start\n");
 	mutex_lock(&device->mutex);

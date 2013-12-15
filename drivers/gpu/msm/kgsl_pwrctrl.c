@@ -18,6 +18,7 @@
 #include <mach/msm_iomap.h>
 #include <mach/msm_bus.h>
 #include <linux/ktime.h>
+#include <linux/dev_namespace.h>
 
 #include "kgsl.h"
 #include "kgsl_pwrscale.h"
@@ -1443,14 +1444,23 @@ EXPORT_SYMBOL(kgsl_active_count_put);
  *
  * Block until all active_cnt users put() their reference.
  */
-void kgsl_active_count_wait(struct kgsl_device *device)
+int kgsl_active_count_wait(struct kgsl_device *device)
 {
+	int retval = 0;
 	BUG_ON(!mutex_is_locked(&device->mutex));
 
 	if (atomic_read(&device->active_cnt) != 0) {
 		mutex_unlock(&device->mutex);
 		wait_for_completion(&device->suspend_gate);
 		mutex_lock(&device->mutex);
+
+		/* Check after waking up if this is
+		 * still fron the active namespace
+		 */
+		if (!is_active_dev_ns(current_dev_ns())) {
+			retval = -EINVAL;
+		}
 	}
+	return retval;
 }
 EXPORT_SYMBOL(kgsl_active_count_wait);
