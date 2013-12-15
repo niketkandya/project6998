@@ -562,8 +562,8 @@ static int kgsl_suspend_device(struct kgsl_device *device, pm_message_t state)
 
 	/* Wait for the active count to hit zero */
 	if (kgsl_active_count_wait(device)) {
-		//do some stuff here
-		//TODO: Niket Kandya
+		status = -EINVAL;
+		goto out;
 	}
 
 	/* Don't let the timer wake us during suspended sleep. */
@@ -593,11 +593,11 @@ static int kgsl_suspend_device(struct kgsl_device *device, pm_message_t state)
 					device->id);
 			goto end;
 	}
+	status = 0;
+out:
 	kgsl_pwrctrl_request_state(device, KGSL_STATE_NONE);
 	device->pwrctrl.nap_allowed = nap_allowed_saved;
 	device->pwrscale.policy = policy_saved;
-	status = 0;
-
 end:
 	mutex_unlock(&device->mutex);
 	KGSL_PWR_WARN(device, "suspend end\n");
